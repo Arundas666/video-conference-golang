@@ -5,10 +5,14 @@ import (
 	"os"
 	"time"
 
+	"v/internal/handlers"
+	w "v/pkg/webrtc"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/template/html"
+	"github.com/gofiber/websocket/v2"
 )
 
 var (
@@ -17,8 +21,9 @@ var (
 	key  = flag.String("key", "", "")
 )
 
-func Run() {
+func Run() error {
 	flag.Parse()
+
 	if *addr == ":" {
 		*addr = ":8080"
 	}
@@ -45,4 +50,19 @@ func Run() {
 	app.Get("/stream/:suuid/viewer/websocket", websocket.New(handlers.StreamViewerWebsocket))
 	app.Static("/", "./assets")
 
+	w.Rooms = make(map[string]*w.Room)
+	w.Streams = make(map[string]*w.Room)
+	go dispatchKeyFrames()
+	if *cert != "" {
+		return app.ListenTLS(*addr, *cert, *key)
+	}
+	return app.Listen(*addr)
+}
+
+func dispatchKeyFrames() {
+	for range time.NewTicker(time.Second * 3).C {
+		for _, room := range w.Rooms {
+			room.Peers.DispatchKeyFrame()
+		}
+	}
 }
